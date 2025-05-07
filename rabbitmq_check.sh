@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Default values
 RABBITMQ_HOST="0.0.0.0"
@@ -20,15 +20,15 @@ usage() {
   exit 1
 }
 
-# Check for --help before getopts (it doesn’t handle long options)
+# Check for --help before getopts (sh doesn't support long options in getopts)
 for arg in "$@"; do
-  if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+  if [ "$arg" = "--help" ] || [ "$arg" = "-h" ]; then
     usage
   fi
 done
 
 # Parse command-line options
-while getopts ":H:P:u:p:r:s:" opt; do
+while getopts "H:P:u:p:r:s:" opt; do
   case $opt in
     H) RABBITMQ_HOST="$OPTARG" ;;
     P) RABBITMQ_PORT="$OPTARG" ;;
@@ -43,17 +43,22 @@ done
 
 echo "Checking RabbitMQ health at http://${RABBITMQ_HOST}:${RABBITMQ_PORT}..."
 
-for ((i=1; i<=MAX_RETRIES; i++)); do
-    STATUS=$(curl -s -u "$RABBITMQ_USER:$RABBITMQ_PASS" "http://${RABBITMQ_HOST}:${RABBITMQ_PORT}/api/health/checks/alarms" | grep -o '"status":"ok"')
+i=1
+while [ "$i" -le "$MAX_RETRIES" ]; do
+  RESPONSE=$(curl -s -u "$RABBITMQ_USER:$RABBITMQ_PASS" "http://${RABBITMQ_HOST}:${RABBITMQ_PORT}/api/health/checks/alarms")
+  STATUS=$(echo "$RESPONSE" | grep '"status":"ok"')
 
-    if [[ "$STATUS" == '"status":"ok"' ]]; then
-        echo "✅ RabbitMQ is OK"
-        exit 0
-    else
-        echo "⏳ Attempt $i/$MAX_RETRIES: Couldn't connect to RabbitMQ"
-        sleep "$SLEEP_INTERVAL"
-    fi
+  if [ -n "$STATUS" ]; then
+    echo "✅ RabbitMQ is OK"
+    exit 0
+  else
+    echo "⏳ Attempt $i/$MAX_RETRIES: Couldn't connect to RabbitMQ"
+    sleep "$SLEEP_INTERVAL"
+  fi
+
+  i=$((i + 1))
 done
 
 echo "❌ RabbitMQ health check failed after $MAX_RETRIES attempts"
 exit 1
+
